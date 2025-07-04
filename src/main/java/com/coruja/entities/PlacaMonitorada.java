@@ -1,0 +1,125 @@
+package com.coruja.entities;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "placas_monitoradas")
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+@ToString
+@EntityListeners(AuditingEntityListener.class) // <-- NOVO: Habilita os "ouvintes" de auditoria para esta entidade
+public class PlacaMonitorada {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long Id;
+
+    @Column(nullable = false, unique = true, length = 7)
+    private String placa;
+
+    private String marcaModelo;
+    private String cor;
+    private String motivo;
+    private boolean statusAtivo;
+
+    @Column(length = 1000)
+    private String observacao;
+
+    private String interessado;
+
+    @CreatedDate // Marca este campo para receber a data e hora de criação
+    @Column(name = "created_at", nullable = false, updatable = false) // Define a coluna no DB
+    private LocalDateTime createdAt;
+
+    @LastModifiedDate // Marca este campo para receber a data e hora da última atualização
+    @Column(name = "updated_at", nullable = false) // Define a coluna no DB
+    private LocalDateTime updatedAt;
+
+    public Long getId() {
+        return Id;
+    }
+
+    public void setId(Long id) {
+        Id = id;
+    }
+
+    public String getPlaca() {
+        return placa;
+    }
+
+    public void setPlaca(String placa) {
+        this.placa = placa;
+    }
+
+    public String getMarcaModelo() {
+        return marcaModelo;
+    }
+
+    public void setMarcaModelo(String marcaModelo) {
+        this.marcaModelo = marcaModelo;
+    }
+
+    public String getCor() {
+        return cor;
+    }
+
+    public void setCor(String cor) {
+        this.cor = cor;
+    }
+
+    public String getMotivo() {
+        return motivo;
+    }
+
+    public void setMotivo(String motivo) {
+        this.motivo = motivo;
+    }
+
+    public boolean isStatusAtivo() {
+        return statusAtivo;
+    }
+
+    public void setStatusAtivo(boolean statusAtivo) {
+        this.statusAtivo = statusAtivo;
+    }
+
+    public String getObservacao() {
+        return observacao;
+    }
+
+    public void setObservacao(String observacao) {
+        this.observacao = observacao;
+    }
+
+    public String getInteressado() {
+        return interessado;
+    }
+
+    public void setInteressado(String interessado) {
+        this.interessado = interessado;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+}
