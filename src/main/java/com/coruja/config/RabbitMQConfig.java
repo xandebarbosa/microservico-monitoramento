@@ -12,6 +12,8 @@ public class RabbitMQConfig {
     public static final String EXCHANGE_NAME = "radares_exchange";
     public static final String MONITORAMENTO_QUEUE_NAME = "monitoramento_radares_queue";
     public static final String ROUTING_KEY_PATTERN = "radares.*"; // Ouve tudo
+    public static final String ALERTAS_QUEUE_NAME = "alertas_confirmados_queue";
+    public static final String ALERTAS_ROUTING_KEY = "alerta.confirmado";
 
     @Bean
     public TopicExchange topicExchange() {
@@ -28,5 +30,15 @@ public class RabbitMQConfig {
     public Binding monitoramentoBinding(Queue monitoramentoQueue, TopicExchange exchange) {
         // Conecta o exchange à nossa fila usando o padrão de roteamento
         return BindingBuilder.bind(monitoramentoQueue).to(exchange).with(ROUTING_KEY_PATTERN);
+    }
+
+    @Bean
+    public Queue alertasBffQueue() {
+        return new Queue(ALERTAS_QUEUE_NAME, true);
+    }
+
+    @Bean
+    public Binding alertasBffBinding(Queue alertasBffQueue, TopicExchange exchange) {
+        return BindingBuilder.bind(alertasBffQueue).to(exchange).with(ALERTAS_ROUTING_KEY);
     }
 }

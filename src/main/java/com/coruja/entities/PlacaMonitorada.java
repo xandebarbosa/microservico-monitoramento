@@ -8,6 +8,8 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "placas_monitoradas")
@@ -42,6 +44,15 @@ public class PlacaMonitorada {
     @LastModifiedDate // Marca este campo para receber a data e hora da última atualização
     @Column(name = "updated_at", nullable = false) // Define a coluna no DB
     private LocalDateTime updatedAt;
+
+    // Define o relacionamento reverso: Uma PlacaMonitorada pode ter muitos AlertasDePassagem.
+    // cascade = CascadeType.ALL: Diz ao JPA: "Qualquer operação (salvar, deletar) que eu fizer
+    //                                     nesta PlacaMonitorada, aplique também aos seus Alertas."
+    // orphanRemoval = true: Garante que se um alerta for removido da lista, ele será deletado do banco.
+    @OneToMany(mappedBy = "placaMonitorada", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @ToString.Exclude // Exclui este campo do toString() para evitar loops infinitos
+    private List<AlertaPassagem> alertas = new ArrayList<>();
+
 
     public Long getId() {
         return Id;
@@ -121,5 +132,13 @@ public class PlacaMonitorada {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public List<AlertaPassagem> getAlertas() {
+        return alertas;
+    }
+
+    public void setAlertas(List<AlertaPassagem> alertas) {
+        this.alertas = alertas;
     }
 }

@@ -1,0 +1,25 @@
+# Declara que vamos usar a rede externa que já foi criada manualmente
+networks:
+  radares-net:
+    external: true
+
+services:
+  # Define o serviço para a aplicação de monitoramento
+  microservico-monitoramento:
+    container_name: microservico-monitoramento
+    # Constrói a imagem a partir do Dockerfile que está nesta mesma pasta
+    build:
+      context: .
+    ports:
+      # Expõe a porta da aplicação (ex: 8082) para a sua máquina local
+      - "8089:8089"
+    environment:
+      # Ativa o perfil de produção para usar o application-prod1.properties
+      - SPRING_PROFILES_ACTIVE=prod
+      # As variáveis para o Telegram serão lidas de um arquivo .env nesta pasta
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+    networks:
+      # Conecta este contêiner à nossa rede compartilhada
+      - radares-net
+    restart: unless-stopped

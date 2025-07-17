@@ -1,6 +1,8 @@
 package com.coruja.controllers;
 
+import com.coruja.dto.AlertaPassagemDTO;
 import com.coruja.dto.PlacaMonitoradaDTO;
+import com.coruja.entities.AlertaPassagem;
 import com.coruja.services.MonitoramentoService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -66,5 +68,10 @@ public class MonitoramentoController {
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return ResponseEntity.noContent().build(); // Retorna 204 No Content, indicando sucesso
+    }
+
+    @GetMapping("/alertas")
+    public ResponseEntity<Page<AlertaPassagemDTO>> findAlerts(Pageable pageable) {
+        return ResponseEntity.ok(service.findAlerts(pageable));
     }
 }
