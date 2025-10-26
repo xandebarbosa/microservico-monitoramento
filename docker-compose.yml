@@ -19,6 +19,10 @@ services:
       # As variáveis para o Telegram serão lidas de um arquivo .env nesta pasta
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
     networks:
       # Conecta este contêiner à nossa rede compartilhada
       - radares-net

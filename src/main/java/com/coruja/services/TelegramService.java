@@ -8,8 +8,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriComponentsBuilder;
+import reactor.core.publisher.Mono;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -28,6 +30,7 @@ public class TelegramService {
     @Value("${telegram.chat.id}")
     private String chatId;
 
+    private static final String TELEGRAM_API_URL_TEMPLATE = "https://api.telegram.org/bot%s/sendMessage";
     private static final String TELEGRAM_API_URL = "https://api.telegram.org/bot%s/sendMessage";
     private final RestTemplate restTemplate = new RestTemplate();
 
@@ -46,31 +49,30 @@ public class TelegramService {
             return;
         }
 
-        String url = String.format(TELEGRAM_API_URL, botToken.trim());
+        String url = String.format(TELEGRAM_API_URL_TEMPLATE, botToken.trim());
 
         Map<String, String> parametros = new HashMap<>();
         parametros.put("chat_id", chatId);
         parametros.put("text", mensagem);
         parametros.put("parse_mode", "HTML");
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<Map<String, String>> requestEntity = new HttpEntity<>(parametros, headers);
-
-        try {
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, requestEntity, String.class);
-
-            if (response.getStatusCode() == HttpStatus.OK) {
-                logger.info("Mensagem enviada com sucesso ao Telegram.");
-            } else {
-                logger.warn("Falha ao enviar mensagem. Código de status: {}", response.getStatusCode());
-            }
-        } catch (HttpStatusCodeException e) {
-            logger.error("Erro HTTP ao enviar mensagem para o Telegram: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
-        } catch (RestClientException e) {
-            logger.error("Erro ao se comunicar com a API do Telegram: {}", e.getMessage());
-        } catch (Exception e) {
-            logger.error("Erro inesperado ao enviar mensagem ao Telegram: ", e);
-        }
+        webClient.post()
+                .uri(url)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(BodyInserters.fromValue(parametros)) // Usar BodyInserters
+                .retrieve()
+                .toBodilessEntity() // Usamos toBodilessEntity pois não precisamos do corpo da resposta
+                .doOnSuccess(response -> {
+                    if (response.getStatusCode().is2xxSuccessful()) {
+                        logger.info("Mensagem enviada com sucesso ao Telegram.");
+                    } else {
+                        logger.warn("Falha ao enviar mensagem. Código de status: {}", response.getStatusCode());
+                    }
+                })
+                .doOnError(error -> {
+                    logger.error("Erro ao enviar mensagem para o Telegram: {}", error.getMessage());
+                })
+                .onErrorResume(e -> Mono.empty()) // Evita que o erro se propague, apenas loga
+                .subscribe(); // Necessário para executar a chamada reativa
     }
 }
