@@ -5,16 +5,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpStatusCodeException;
-import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Mono;
-
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -23,6 +17,7 @@ public class TelegramService {
 
     private static final Logger logger = LoggerFactory.getLogger(TelegramService.class);
     private final WebClient webClient;
+    private static final String TELEGRAM_API_URL_TEMPLATE = "https://api.telegram.org/bot%s/sendMessage";
 
     @Value("${telegram.bot.token}")
     private String botToken;
@@ -30,29 +25,20 @@ public class TelegramService {
     @Value("${telegram.chat.id}")
     private String chatId;
 
-    private static final String TELEGRAM_API_URL_TEMPLATE = "https://api.telegram.org/bot%s/sendMessage";
-    private static final String TELEGRAM_API_URL = "https://api.telegram.org/bot%s/sendMessage";
-    private final RestTemplate restTemplate = new RestTemplate();
-
     public TelegramService(WebClient.Builder webClientBuilder) {
+        // É boa prática configurar timeouts globais no Builder se necessário no futuro
         this.webClient = webClientBuilder.build();
     }
 
     public void sendMessage(String mensagem) {
-        if (botToken == null || botToken.isEmpty()) {
-            logger.error("Erro: O botToken do Telegram está vazio ou não foi configurado.");
-            return;
-        }
-
-        if (chatId == null || chatId.isEmpty()) {
-            logger.error("Erro: O chatId do Telegram está vazio ou não foi configurado.");
+        if (isConfiguracaoInvalida()) {
             return;
         }
 
         String url = String.format(TELEGRAM_API_URL_TEMPLATE, botToken.trim());
 
         Map<String, String> parametros = new HashMap<>();
-        parametros.put("chat_id", chatId);
+        parametros.put("chat_id", chatId.trim()); // Trim garante que não vá com espaços vazios
         parametros.put("text", mensagem);
         parametros.put("parse_mode", "HTML");
 
@@ -74,5 +60,20 @@ public class TelegramService {
                 })
                 .onErrorResume(e -> Mono.empty()) // Evita que o erro se propague, apenas loga
                 .subscribe(); // Necessário para executar a chamada reativa
+    }
+
+    /**
+     * Valida se as configurações necessárias estão presentes.
+     */
+    private boolean isConfiguracaoInvalida() {
+        if (botToken == null || botToken.trim().isEmpty()) {
+            logger.error("ERRO CRÍTICO: Token do Bot Telegram não configurado.");
+            return true;
+        }
+        if (chatId == null || chatId.trim().isEmpty()) {
+            logger.error("ERRO CRÍTICO: Chat ID do Telegram não configurado.");
+            return true;
+        }
+        return false;
     }
 }

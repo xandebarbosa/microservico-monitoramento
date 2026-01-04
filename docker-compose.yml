@@ -27,3 +27,26 @@ services:
       # Conecta este contêiner à nossa rede compartilhada
       - radares-net
     restart: unless-stopped
+    depends_on:
+      - evolution-api
+  # Novo serviço: Evolution API
+  evolution-api:
+    container_name: evolution-api
+    image: atendai/evolution-api:v2.1.1
+    restart: always
+    ports:
+      - "8090:8080" # Acesso externo via http://localhost:8090
+    environment:
+      - SERVER_URL=http://localhost:8090
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_TOKEN}
+      # Desabilita banco de dados complexo para uso local simples (usa arquivo)
+      - DATABASE_ENABLED=false
+    volumes:
+      - evolution_instances:/evolution/instances
+      - evolution_store:/evolution/store
+    networks:
+      - radares-net
+
+volumes:
+  evolution_instances:
+  evolution_store:
