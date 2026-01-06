@@ -1,0 +1,1 @@
+ALTER TABLE placas_monitoradas ADD COLUMN telefone VARCHAR(20);

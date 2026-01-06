@@ -34,8 +34,12 @@ public class MonitoramentoService {
     private static final Logger logger = LoggerFactory.getLogger(MonitoramentoService.class);
 
     private final PlacaMonitoradaRepository placaRepository;
-    private final TelegramService telegramService;
     private final AlertaPassagemRepository alertaRepository;
+
+    // Serviços de Notificação
+    private final TelegramService telegramService;
+    private final EvolutionWhatsappService whatsappService;
+
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
 
@@ -45,9 +49,15 @@ public class MonitoramentoService {
     private static final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     @Autowired
-    public MonitoramentoService(PlacaMonitoradaRepository placaRepository, TelegramService telegramService, AlertaPassagemRepository alertaPassagemRepository, RabbitTemplate rabbitTemplate, ObjectMapper objectMapper) {
+    public MonitoramentoService(PlacaMonitoradaRepository placaRepository,
+                                TelegramService telegramService,
+                                EvolutionWhatsappService whatsappService,
+                                AlertaPassagemRepository alertaPassagemRepository,
+                                RabbitTemplate rabbitTemplate,
+                                ObjectMapper objectMapper) {
         this.placaRepository = placaRepository;
         this.telegramService = telegramService;
+        this.whatsappService = whatsappService;
         this.alertaRepository = alertaPassagemRepository;
         this.rabbitTemplate = rabbitTemplate;
         this.objectMapper = objectMapper;
@@ -75,31 +85,44 @@ public class MonitoramentoService {
                         AlertaPassagem alertaSalvo = criarAlertaDaMensagem(message, placaMonitorada);
                         alertaRepository.save(alertaSalvo);
 
-                        // 2. Envia para o Telegram
+                        // 2. Gerar Mensagem Formatada
                         String notificacaoTelegram = formatTelegramMessage(alertaSalvo);
+
+                        // 3. Enviar TELEGRAM (Canal de Monitoramento Geral)
                         telegramService.sendMessage(notificacaoTelegram);
 
                         logger.warn("ALERTA: Placa {} detectada, salva no histórico e notificada.", placaDetectada);
 
-                        // NOVO: Publica o alerta confirmado em sua própria fila
-                        try {
-                            // 3. Cria um DTO a partir da entidade JÁ SALVA
-                            AlertaPassagemDTO alertaDTO = new AlertaPassagemDTO(alertaSalvo);
-                            // 4. Converte o DTO para uma string JSON
-                            String alertaJson = objectMapper.writeValueAsString(alertaDTO);
-                            // 5. Publica na exchange com uma routing key específica para alertas
-                            rabbitTemplate.convertAndSend("radares_exchange", "alerta.confirmado", alertaJson);
-                            logger.info("Alerta da placa {} publicado na fila de alertas confirmados.", placaDetectada);
-//                            String alertaJson = objectMapper.writeValueAsString(new AlertaPassagemDTO(novoAlerta));
-//                            rabbitTemplate.convertAndSend("radares_exchange", "alerta.confirmado", alertaJson);
-//                            logger.info("Alerta da placa {} publicado na fila de alertas confirmados.", placaDetectada);
-                        } catch (JsonProcessingException e) {
-                            logger.error("Erro ao serializar alerta para JSON", e);
+                        // 4. Enviar WHATSAPP (Aviso Individual para o Interessado)
+                        if (placaMonitorada.getTelefone() != null && !placaMonitorada.getTelefone().isBlank()) {
+                            // Adicionamos uma saudação personalizada para o WhatsApp
+                            String msgWhatsapp = "Olá " + placaMonitorada.getInteressado() + "!\n\n" + notificacaoTelegram;
+                            whatsappService.enviarMensagem(msgWhatsapp, placaMonitorada.getTelefone());
+                        } else {
+                            logger.warn("Placa {} detectada, mas sem telefone cadastrado para notificação WhatsApp.", placaDetectada);
                         }
+
+                        // 5. Publicar evento de Alerta Confirmado
+                        publicarAlertaConfirmado(alertaSalvo);
                     });
 
         } catch (Exception e) {
             logger.error("Erro inesperado ao processar mensagem do RabbitMQ: {}", message, e);
+        }
+    }
+
+    // Método auxiliar para publicar no RabbitMQ
+    private void publicarAlertaConfirmado(AlertaPassagem alerta) {
+        try {
+            // Cria um DTO a partir da entidade JÁ SALVA
+            AlertaPassagemDTO alertaDTO = new AlertaPassagemDTO(alerta);
+            // Converte o DTO para uma string JSON
+            String alertaJson = objectMapper.writeValueAsString(alertaDTO);
+            // Publica na exchange com uma routing key específica para alertas
+            rabbitTemplate.convertAndSend("radares_exchange", "alerta.confirmado", alertaJson);
+            logger.info("Alerta da placa {} processado e notificado.", alerta.getPlaca());
+        } catch (JsonProcessingException e) {
+            logger.error("Erro ao serializar alerta", e);
         }
     }
 
@@ -277,5 +300,6 @@ public class MonitoramentoService {
         entity.setStatusAtivo(dto.isStatusAtivo());
         entity.setObservacao(dto.getObservacao());
         entity.setInteressado(dto.getInteressado());
+        entity.setTelefone(dto.getTelefone());
     }
 }

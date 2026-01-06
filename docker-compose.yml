@@ -23,6 +23,9 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - RABBITMQ_USER=${RABBITMQ_USER}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - EVOLUTION_API_URL=http://evolution-api:8080
+      - EVOLUTION_API_TOKEN=${EVOLUTION_API_TOKEN}
+      - EVOLUTION_API_INSTANCE=RadarBot
     networks:
       # Conecta este contêiner à nossa rede compartilhada
       - radares-net
@@ -32,21 +35,68 @@ services:
   # Novo serviço: Evolution API
   evolution-api:
     container_name: evolution-api
-    image: atendai/evolution-api:v2.1.1
+    image: atendai/evolution-api:v2.2.2
     restart: always
     ports:
       - "8090:8080" # Acesso externo via http://localhost:8090
+    # === ADICIONE ISSO AQUI PARA CORRIGIR O TIMEOUT ===
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     environment:
-      - SERVER_URL=http://localhost:8090
+      - SERVER_URL=http://evolution-api:8080
       - AUTHENTICATION_API_KEY=${EVOLUTION_API_TOKEN}
-      # Desabilita banco de dados complexo para uso local simples (usa arquivo)
-      - DATABASE_ENABLED=false
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres-db:5432/monitoramento_db?schema=evolution
+      - DATABASE_CONNECTION_CLIENT_NAME=evolution_v2
+      # === REDIS (Correção do erro "disconnected") ===
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://redis:6379/0
+      - CACHE_REDIS_PREFIX_KEY=evolution
+      - CACHE_REDIS_SAVE_INSTANCES=false
+      - CACHE_LOCAL_ENABLED=false
+      # === ADICIONE ESTA LINHA PARA CORRIGIR O QR CODE ===
+      - CONFIG_SESSION_PHONE_VERSION=2.3000.1025062854
+      # Opcional: Desativar RabbitMQ se não estiver usando para a Evolution
+      - RABBITMQ_ENABLED=false
     volumes:
       - evolution_instances:/evolution/instances
       - evolution_store:/evolution/store
     networks:
       - radares-net
+    depends_on:
+      - redis
+
+  evolution-manager:
+    container_name: evolution-manager
+    image: evoapicloud/evolution-manager:latest
+    restart: always
+    ports:
+      - "8091:80" # Porta para acessar o painel (8091)
+    environment:
+      # URL da sua API (como seu navegador vê a API)
+      - VITE_API_URL=http://localhost:8090
+    networks:
+      - radares-net
+    depends_on:
+      - evolution-api
+    # === CORREÇÃO TEMPORÁRIA DO BUG DO NGINX ===
+    entrypoint: /bin/sh
+    command: >
+      -c "sed -i 's/ must-revalidate//g' /etc/nginx/conf.d/nginx.conf && nginx -g 'daemon off;'"
+
+  redis:
+    image: redis:latest
+    container_name: redis_evolution
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - radares-net
+    restart: always
 
 volumes:
   evolution_instances:
   evolution_store:
+  redis_data:

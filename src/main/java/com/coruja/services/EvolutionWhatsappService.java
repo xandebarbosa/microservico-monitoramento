@@ -30,6 +30,23 @@ public class EvolutionWhatsappService implements NotificacaoService {
         this.webClient = webClientBuilder.build();
     }
 
+    /**
+     * Inicia a conexão da instância e força geração do QR Code
+     */
+    public Mono<String> conectarInstancia() {
+
+        String connectUrl = String.format("%s/instance/connect/%s", apiUrl, instanceName);
+
+        return webClient.get()
+                .uri(connectUrl)
+                .header("apikey", apiToken)
+                .accept(MediaType.APPLICATION_JSON)
+                .retrieve()
+                .bodyToMono(String.class)
+                .doOnSuccess(r -> logger.info("Conexão iniciada para instância {}", instanceName))
+                .doOnError(e -> logger.error("Erro ao conectar instância {}: {}", instanceName, e.getMessage()));
+    }
+
     @Override
     public void enviarMensagem(String mensagem, String numeroTelefone) {
         if (numeroTelefone == null || numeroTelefone.isBlank()) {
@@ -58,7 +75,7 @@ public class EvolutionWhatsappService implements NotificacaoService {
 
         webClient.post()
                 .uri(urlCompleta)
-                .header("apiKey", apiToken)
+                .header("apikey", apiToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(body)
                 .retrieve()
@@ -67,5 +84,31 @@ public class EvolutionWhatsappService implements NotificacaoService {
                 .doOnError(e -> logger.error("Erro ao enviar WhatsApp para {}: {}", finalNumeroLimpo, e.getMessage()))
                 .onErrorResume(e -> Mono.empty())
                 .subscribe();
+    }
+
+    /**
+     * Método utilitário para normalizar números brasileiros
+     */
+    private String normalizarNumero(String telefone) {
+
+        String numero = telefone.replaceAll("\\D", "");
+
+        if (numero.length() <= 11) {
+            numero = "55" + numero;
+        }
+
+        return numero;
+    }
+
+    /**
+     * Método único e enxuto para normalizar números
+     */
+    private String normalizarNumeroDestino(String telefone) {
+
+        String numero = telefone.replaceAll("\\D", "");
+
+        return numero.length() <= 11
+                ? "55" + numero
+                : numero;
     }
 }

@@ -19,6 +19,7 @@ public class PlacaMonitoradaDTO {
     private boolean statusAtivo;
     private String observacao;
     private String interessado;
+    private String telefone;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -32,6 +33,7 @@ public class PlacaMonitoradaDTO {
         this.statusAtivo = entity.isStatusAtivo();
         this.observacao = entity.getObservacao();
         this.interessado = entity.getInteressado();
+        this.telefone = entity.getTelefone();
         this.createdAt = entity.getCreatedAt();
         this.updatedAt = entity.getUpdatedAt();
     }
