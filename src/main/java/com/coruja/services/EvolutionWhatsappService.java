@@ -1,5 +1,6 @@
 package com.coruja.services;
 
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -7,7 +8,9 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -31,47 +34,100 @@ public class EvolutionWhatsappService implements NotificacaoService {
     }
 
     /**
-     * Inicia a conexão da instância e força geração do QR Code
+     * Executa ao iniciar o serviço: Garante que a instância exista e esteja pronta para conectar.
+     * * Tenta conectar insistentemente até a API estar online.
      */
-    public Mono<String> conectarInstancia() {
+    @PostConstruct
+    public void inicializarInstancia() {
+        logger.info("🚀 Iniciando serviço de WhatsApp. Aguardando Evolution API...");
+        verificarEstadoConexao()
+                .subscribe(
+                        success -> logger.info("✅ Processo de inicialização do WhatsApp concluído."),
+                        error -> logger.error("❌ Falha crítica ao inicializar WhatsApp após várias tentativas: {}", error.getMessage())
+                );
+    }
 
+    /**
+     * CORREÇÃO APLICADA AQUI:
+     * Usamos flatMap para garantir que o fluxo retorne Mono<Void> TANTO no sucesso QUANTO no erro.
+     */
+    public Mono<Void> verificarEstadoConexao() {
+        String url = String.format("%s/instance/connectionState/%s", apiUrl, instanceName);
+
+        return webClient.get()
+                .uri(url)
+                .header("apikey", apiToken)
+                .retrieve()
+                .bodyToMono(Map.class)
+                .flatMap(response -> {
+                    Map<String, Object> instanceData = (Map<String, Object>) response.get("instance");
+                    String state = (String) instanceData.get("state");
+                    logger.info("📡 Instância '{}' encontrada. Estado: {}", instanceName, state);
+
+                    if ("close".equalsIgnoreCase(state)) {
+                        return conectarInstancia().then();
+                    }
+                    return Mono.empty();
+                })
+                // Se der erro (404 ou Connection Refused), tenta criar
+                .onErrorResume(e -> {
+                    logger.warn("⚠️ Instância não encontrada ou API indisponível. Tentando criar/conectar...");
+                    return criarInstancia();
+                })
+                // === A MÁGICA DO RETRY ===
+                // Tenta 10 vezes, esperando um pouco mais a cada tentativa (Backoff)
+                // Isso dá tempo para a Evolution API subir se ela estiver lenta.
+                .retryWhen(Retry.backoff(10, Duration.ofSeconds(5))
+                        .doBeforeRetry(signal -> logger.info("🔄 Tentativa {} de conectar na Evolution API...", signal.totalRetries() + 1))
+                );
+    }
+
+    private Mono<Void> criarInstancia() {
+        String url = String.format("%s/instance/create", apiUrl);
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("instanceName", instanceName);
+        body.put("token", java.util.UUID.randomUUID().toString());
+        body.put("qrcode", true);
+        body.put("integration", "WHATSAPP-BAILEYS");
+
+        return webClient.post()
+                .uri(url)
+                .header("apikey", apiToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(body)
+                .retrieve()
+                .bodyToMono(Map.class)
+                .flatMap(resp -> {
+                    logger.info("Instância '{}' CRIADA com sucesso! Iniciando conexão...", instanceName);
+                    return conectarInstancia();
+                })
+                .then();
+    }
+
+    public Mono<String> conectarInstancia() {
         String connectUrl = String.format("%s/instance/connect/%s", apiUrl, instanceName);
 
         return webClient.get()
                 .uri(connectUrl)
                 .header("apikey", apiToken)
-                .accept(MediaType.APPLICATION_JSON)
                 .retrieve()
                 .bodyToMono(String.class)
-                .doOnSuccess(r -> logger.info("Conexão iniciada para instância {}", instanceName))
-                .doOnError(e -> logger.error("Erro ao conectar instância {}: {}", instanceName, e.getMessage()));
+                .doOnSuccess(r -> logger.info("Solicitação de conexão enviada! Verifique o QR Code."))
+                .doOnError(e -> logger.error("Erro ao solicitar conexão: {}", e.getMessage()));
     }
 
     @Override
     public void enviarMensagem(String mensagem, String numeroTelefone) {
-        if (numeroTelefone == null || numeroTelefone.isBlank()) {
-            logger.warn("Tentativa de envio de WhatsApp sem número de destino.");
-            return;
-        }
+        if (numeroTelefone == null || numeroTelefone.isBlank()) return;
 
-        // Limpeza básica do número (apenas números)
-        String numeroLimpo = numeroTelefone.replaceAll("\\D", "");
-
-        // Garante o código do país (55 para Brasil) se não houver
-        if (numeroLimpo.length() <= 11) {
-            numeroLimpo = "55" + numeroLimpo;
-        }
-
-        // Monta a URL: /message/sendText/{instance}
+        String numeroLimpo = normalizarNumeroDestino(numeroTelefone);
         String urlCompleta = String.format("%s/message/sendText/%s", apiUrl, instanceName);
 
-        // Corpo JSON esperado pela Evolution API v2
         Map<String, Object> body = new HashMap<>();
         body.put("number", numeroLimpo);
         body.put("text", mensagem);
-        body.put("delay", 1200); // Delay simulado de digitação (Opicional)
-
-        String finalNumeroLimpo = numeroLimpo;
+        body.put("delay", 1200);
 
         webClient.post()
                 .uri(urlCompleta)
@@ -80,35 +136,14 @@ public class EvolutionWhatsappService implements NotificacaoService {
                 .bodyValue(body)
                 .retrieve()
                 .toBodilessEntity()
-                .doOnSuccess(r -> logger.info("WhatsApp enviado para {}", finalNumeroLimpo))
-                .doOnError(e -> logger.error("Erro ao enviar WhatsApp para {}: {}", finalNumeroLimpo, e.getMessage()))
+                .doOnSuccess(r -> logger.info("WhatsApp enviado para {}", numeroLimpo))
+                .doOnError(e -> logger.error("Erro ao enviar WhatsApp: {}", e.getMessage()))
                 .onErrorResume(e -> Mono.empty())
                 .subscribe();
     }
 
-    /**
-     * Método utilitário para normalizar números brasileiros
-     */
-    private String normalizarNumero(String telefone) {
-
-        String numero = telefone.replaceAll("\\D", "");
-
-        if (numero.length() <= 11) {
-            numero = "55" + numero;
-        }
-
-        return numero;
-    }
-
-    /**
-     * Método único e enxuto para normalizar números
-     */
     private String normalizarNumeroDestino(String telefone) {
-
         String numero = telefone.replaceAll("\\D", "");
-
-        return numero.length() <= 11
-                ? "55" + numero
-                : numero;
+        return numero.length() <= 11 ? "55" + numero : numero;
     }
 }

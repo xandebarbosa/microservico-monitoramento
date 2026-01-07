@@ -21,6 +21,11 @@ services:
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      # Nota: A URL aponta para 'postgres-db' que é o nome do container na Stack EFK
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-db:5432/monitoramento_db
+      # Conecta no RabbitMQ da Stack EFK (nome do serviço: rabbitmq)
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
       - RABBITMQ_USER=${RABBITMQ_USER}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
       - EVOLUTION_API_URL=http://evolution-api:8080
@@ -44,7 +49,7 @@ services:
       - 8.8.8.8
       - 8.8.4.4
     environment:
-      - SERVER_URL=http://evolution-api:8080
+      - SERVER_URL=http://localhost:8090
       - AUTHENTICATION_API_KEY=${EVOLUTION_API_TOKEN}
       - DATABASE_ENABLED=true
       - DATABASE_PROVIDER=postgresql
@@ -56,10 +61,10 @@ services:
       - CACHE_REDIS_PREFIX_KEY=evolution
       - CACHE_REDIS_SAVE_INSTANCES=false
       - CACHE_LOCAL_ENABLED=false
-      # === ADICIONE ESTA LINHA PARA CORRIGIR O QR CODE ===
-      - CONFIG_SESSION_PHONE_VERSION=2.3000.1025062854
       # Opcional: Desativar RabbitMQ se não estiver usando para a Evolution
       - RABBITMQ_ENABLED=false
+      # Aumenta o timeout do WebSocket
+      - WEBSOCKET_PING_INTERVAL=20000
     volumes:
       - evolution_instances:/evolution/instances
       - evolution_store:/evolution/store
@@ -90,8 +95,8 @@ services:
     image: redis:latest
     container_name: redis_evolution
     command: ["redis-server", "--appendonly", "yes"]
-    volumes:
-      - redis_data:/data
+    #volumes:
+    #  - redis_data:/data
     networks:
       - radares-net
     restart: always
