@@ -4,6 +4,29 @@ networks:
     external: true
 
 services:
+  # Teste de conectividade - REMOVA APÓS TESTAR
+  test-connection:
+    image: alpine:latest
+    container_name: test-connection
+    command: >
+      sh -c "
+        echo '🔍 Testando conectividade com Evolution API...' &&
+        apk add --no-cache curl &&
+        sleep 5 &&
+        echo '1. Testando DNS resolution:' &&
+        nslookup evolution-api &&
+        echo '2. Testando conexão na porta 8080:' &&
+        nc -zv evolution-api 8080 &&
+        echo '3. Testando HTTP request:' &&
+        curl -v http://evolution-api:8080/instance/fetchInstances?apikey=$$EVOLUTION_API_TOKEN || echo '❌ Falha na conexão' &&
+        echo '✅ Testes completos'
+      "
+    environment:
+      - EVOLUTION_API_TOKEN=${EVOLUTION_API_TOKEN}
+    networks:
+      - radares-net
+    depends_on:
+      - evolution-api
   # Define o serviço para a aplicação de monitoramento
   microservico-monitoramento:
     container_name: microservico-monitoramento
@@ -31,6 +54,21 @@ services:
       - EVOLUTION_API_URL=http://evolution-api:8080
       - EVOLUTION_API_TOKEN=${EVOLUTION_API_TOKEN}
       - EVOLUTION_API_INSTANCE=RadarBot
+      - EVOLUTION_MAX_RETRIES=10
+      - EVOLUTION_RETRY_DELAY=30
+      - EVOLUTION_TIMEOUT_SECONDS=60
+      - WAIT_FOR_EVOLUTION_API=true
+      - WAIT_TIMEOUT=180
+      # Configurações para lidar com banco lento
+      #- SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT=60000
+      #- SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT=0
+      - SPRING_FLYWAY_ENABLED=true
+      # Configurações de logging
+      - LOGGING_LEVEL_COM_CORUJA_SERVICES=DEBUG
+      - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB_REACTIVE_FUNCTION_CLIENT=DEBUG
+      - LOGGING_LEVEL_COM_CORUJA_SERVICES_WHATSAPP=DEBUG
+      - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB_REACTIVE_FUNCTION_CLIENT=INFO
+      - EVOLUTION_DEBUG_RESPONSE=true
     networks:
       # Conecta este contêiner à nossa rede compartilhada
       - radares-net
@@ -44,13 +82,16 @@ services:
     restart: always
     ports:
       - "8090:8080" # Acesso externo via http://localhost:8090
+    depends_on:
+      redis:
+        condition: service_healthy
     # === ADICIONE ISSO AQUI PARA CORRIGIR O TIMEOUT ===
     dns:
       - 8.8.8.8
       - 8.8.4.4
     environment:
       - SERVER_URL=http://localhost:8090
-      - AUTHENTICATION_API_KEY=${EVOLUTION_API_TOKEN}
+      - AUTHENTICATION_API_KEY=mkWC5aP01jmtwJEizQa8
       - DATABASE_ENABLED=true
       - DATABASE_PROVIDER=postgresql
       - DATABASE_CONNECTION_URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres-db:5432/monitoramento_db?schema=evolution
@@ -65,13 +106,19 @@ services:
       - RABBITMQ_ENABLED=false
       # Aumenta o timeout do WebSocket
       - WEBSOCKET_PING_INTERVAL=20000
+      - PRISMA_BINARY_TARGETS=native
+      - NODE_OPTIONS=--max-old-space-size=4096
     volumes:
       - evolution_instances:/evolution/instances
       - evolution_store:/evolution/store
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/instance/fetchInstances?apikey=${EVOLUTION_API_TOKEN} || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     networks:
       - radares-net
-    depends_on:
-      - redis
 
   evolution-manager:
     container_name: evolution-manager
@@ -94,14 +141,18 @@ services:
   redis:
     image: redis:latest
     container_name: redis_evolution
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
     #volumes:
     #  - redis_data:/data
     networks:
       - radares-net
-    restart: always
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   evolution_instances:
   evolution_store:
-  redis_data:
