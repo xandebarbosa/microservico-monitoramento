@@ -20,6 +20,7 @@ public class PlacaMonitoradaDTO {
     private String observacao;
     private String interessado;
     private String telefone;
+    private String telegramChatId;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -34,6 +35,7 @@ public class PlacaMonitoradaDTO {
         this.observacao = entity.getObservacao();
         this.interessado = entity.getInteressado();
         this.telefone = entity.getTelefone();
+        this.telegramChatId = entity.getTelegramChatId();
         this.createdAt = entity.getCreatedAt();
         this.updatedAt = entity.getUpdatedAt();
     }

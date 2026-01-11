@@ -36,9 +36,8 @@ public class MonitoramentoService {
     private final PlacaMonitoradaRepository placaRepository;
     private final AlertaPassagemRepository alertaRepository;
 
-    // Serviços de Notificação
+    // Serviço de Notificação
     private final TelegramService telegramService;
-    private final EvolutionWhatsappService whatsappService;
 
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
@@ -51,13 +50,11 @@ public class MonitoramentoService {
     @Autowired
     public MonitoramentoService(PlacaMonitoradaRepository placaRepository,
                                 TelegramService telegramService,
-                                EvolutionWhatsappService whatsappService,
                                 AlertaPassagemRepository alertaPassagemRepository,
                                 RabbitTemplate rabbitTemplate,
                                 ObjectMapper objectMapper) {
         this.placaRepository = placaRepository;
         this.telegramService = telegramService;
-        this.whatsappService = whatsappService;
         this.alertaRepository = alertaPassagemRepository;
         this.rabbitTemplate = rabbitTemplate;
         this.objectMapper = objectMapper;
@@ -66,6 +63,8 @@ public class MonitoramentoService {
     /**
      * Ouve a fila do RabbitMQ, verifica se a placa é de interesse e, se for,
      * salva o alerta e envia a notificação para o Telegram.
+     * Notifica o Grupo Geral
+     * Notifica Usuário (se cadastrado)
      */
     @RabbitListener(queues = "monitoramento_radares_queue")
     public void onRadarMessage(String message) {
@@ -89,19 +88,21 @@ public class MonitoramentoService {
                         String notificacaoTelegram = formatTelegramMessage(alertaSalvo);
 
                         // 3. Enviar TELEGRAM (Canal de Monitoramento Geral)
-                        telegramService.sendMessage(notificacaoTelegram);
+                        // Envia para o canal configurado no .env
+                        telegramService.sendToGeneralChannel(notificacaoTelegram);
+                        logger.info("ALERTA: Placa {} detectada, salva no histórico e notificada.", placaDetectada);
 
-                        logger.warn("ALERTA: Placa {} detectada, salva no histórico e notificada.", placaDetectada);
+                        // 4. Enviar TELEGRAM para pessoa específica (OPCIONAL)
+                        // Verifica se essa placa tem um "Dono" cadastrado com Telegram
+                        String chatIdPessoal = placaMonitorada.getTelegramChatId();
 
-                        // 4. Enviar WHATSAPP (Aviso Individual para o Interessado)
-                        if (placaMonitorada.getTelefone() != null && !placaMonitorada.getTelefone().isBlank()) {
-                            // Adicionamos uma saudação personalizada para o WhatsApp
-                            String msgWhatsapp = "Olá " + placaMonitorada.getInteressado() + "!\n\n" + notificacaoTelegram;
-                            whatsappService.enviarMensagem(msgWhatsapp, placaMonitorada.getTelefone());
+                        if (chatIdPessoal != null && !chatIdPessoal.isBlank()) {
+                            String textoPessoal = "Alerta Veículo Monitorado" + placaMonitorada.getInteressado() + "!\n\n" + notificacaoTelegram;
+                            telegramService.enviarMensagem(textoPessoal, chatIdPessoal);
+                            logger.info("Alerta enviado para o interessado: {}", placaMonitorada.getInteressado());
                         } else {
-                            logger.warn("Placa {} detectada, mas sem telefone cadastrado para notificação WhatsApp.", placaDetectada);
+                            logger.debug("Placa sem Telegram pessoal cadastrado. Apenas grupo notificado.");
                         }
-
                         // 5. Publicar evento de Alerta Confirmado
                         publicarAlertaConfirmado(alertaSalvo);
                     });

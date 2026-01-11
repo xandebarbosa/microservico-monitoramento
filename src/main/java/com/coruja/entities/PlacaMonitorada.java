@@ -58,6 +58,11 @@ public class PlacaMonitorada {
     @Column(name = "telefone")
     private String telefone;
 
+    @Getter
+    @Setter
+    @Column(name = "telegram_chat_id")
+    private String telegramChatId;
+
     @Setter
     @Getter
     @CreatedDate // Marca este campo para receber a data e hora de criação
