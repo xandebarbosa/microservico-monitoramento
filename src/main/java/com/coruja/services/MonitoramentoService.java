@@ -18,6 +18,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -78,37 +79,43 @@ public class MonitoramentoService {
             }
             String placaDetectada = parts[3];
 
+            // Busca a placa APENAS se estiver ativa
             placaRepository.findByPlacaAndStatusAtivo(placaDetectada, true)
-                    .ifPresent(placaMonitorada -> {
-                        // 1. Salva a entidade e captura a instância retornada, que contém o ID.
-                        AlertaPassagem alertaSalvo = criarAlertaDaMensagem(message, placaMonitorada);
-                        alertaRepository.save(alertaSalvo);
-
-                        // 2. Gerar Mensagem Formatada
-                        String notificacaoTelegram = formatTelegramMessage(alertaSalvo);
-
-                        // 3. Enviar TELEGRAM (Canal de Monitoramento Geral)
-                        // Envia para o canal configurado no .env
-                        telegramService.sendToGeneralChannel(notificacaoTelegram);
-                        logger.info("ALERTA: Placa {} detectada, salva no histórico e notificada.", placaDetectada);
-
-                        // 4. Enviar TELEGRAM para pessoa específica (OPCIONAL)
-                        // Verifica se essa placa tem um "Dono" cadastrado com Telegram
-                        String chatIdPessoal = placaMonitorada.getTelegramChatId();
-
-                        if (chatIdPessoal != null && !chatIdPessoal.isBlank()) {
-                            String textoPessoal = "Alerta Veículo Monitorado" + placaMonitorada.getInteressado() + "!\n\n" + notificacaoTelegram;
-                            telegramService.enviarMensagem(textoPessoal, chatIdPessoal);
-                            logger.info("Alerta enviado para o interessado: {}", placaMonitorada.getInteressado());
-                        } else {
-                            logger.debug("Placa sem Telegram pessoal cadastrado. Apenas grupo notificado.");
-                        }
-                        // 5. Publicar evento de Alerta Confirmado
-                        publicarAlertaConfirmado(alertaSalvo);
-                    });
+                    .ifPresent(placaMonitorada -> processarAlerta(message, placaMonitorada));
 
         } catch (Exception e) {
             logger.error("Erro inesperado ao processar mensagem do RabbitMQ: {}", message, e);
+        }
+    }
+
+    private void processarAlerta(String message, PlacaMonitorada placaMonitorada) {
+        // 1. Salvar Alerta
+        AlertaPassagem alertaSalvo = alertaRepository.save(criarAlertaDaMensagem(message, placaMonitorada));
+
+        // 2. Formatar Texto
+        String textoNotificacao = formatTelegramMessage(alertaSalvo);
+
+        // 3. Notificar Grupo Geral (Sempre envia)
+        telegramService.sendToGeneralChannel(textoNotificacao);
+
+        // 4. Notificar Usuário Específico (Se configurado)
+        notificarUsuarioEspecifico(placaMonitorada, textoNotificacao);
+
+        // 5. Publicar evento de confirmação
+        publicarAlertaConfirmado(alertaSalvo);
+    }
+
+    private void notificarUsuarioEspecifico(PlacaMonitorada placa, String textoBase) {
+        String chatIdPessoal = placa.getTelegramChatId();
+
+        if (StringUtils.hasText(chatIdPessoal)) {
+            String textoPessoal = "⚠️ <b>SEU VEÍCULO FOI DETECTADO!</b> ⚠️\n\n" + textoBase;
+            telegramService.enviarMensagem(textoPessoal, chatIdPessoal);
+            logger.info("Notificação privada enviada para interessado: {} (ChatId: {})",
+                    placa.getInteressado(), chatIdPessoal);
+        } else {
+            logger.info("Nenhum Chat ID privado configurado para a placa {}. Apenas grupo notificado.",
+                    placa.getPlaca());
         }
     }
 
@@ -302,5 +309,6 @@ public class MonitoramentoService {
         entity.setObservacao(dto.getObservacao());
         entity.setInteressado(dto.getInteressado());
         entity.setTelefone(dto.getTelefone());
+        entity.setTelegramChatId(dto.getTelegramChatId());
     }
 }

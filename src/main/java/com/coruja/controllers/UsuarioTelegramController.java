@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 
@@ -22,11 +23,15 @@ public class UsuarioTelegramController {
         this.usuarioTelegramRepository = usuarioTelegramRepository;
     }
 
+    /**
+     * Endpoint para forçar o bot a ler novas mensagens e cadastrar quem falou com ele.
+     * Retorna a lista de quem foi encontrado/atualizado.
+     */
+    // CORREÇÃO: Retorna Mono<ResponseEntity> para esperar o processamento
     @GetMapping("/sincronizar")
-    public ResponseEntity<String> sincronizar() {
-        // Dispara a busca na API do Telegram e salva no banco
-        telegramService.processarNovosUsuarios().subscribe();
-        return ResponseEntity.ok("Sincronizaçao iniciada em background.");
+    public Mono<ResponseEntity<List<UsuarioTelegram>>> sincronizar() {
+        return telegramService.processarNovosUsuarios()
+                .map(ResponseEntity::ok);
     }
 
     @GetMapping

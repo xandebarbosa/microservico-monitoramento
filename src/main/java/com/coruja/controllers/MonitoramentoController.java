@@ -4,12 +4,17 @@ import com.coruja.dto.AlertaPassagemDTO;
 import com.coruja.dto.PlacaMonitoradaDTO;
 import com.coruja.entities.AlertaPassagem;
 import com.coruja.services.MonitoramentoService;
+import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Collections;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/monitoramento")
@@ -28,8 +33,12 @@ public class MonitoramentoController {
      */
     @GetMapping("/{id}")
     public ResponseEntity<PlacaMonitoradaDTO> findById(@PathVariable Long id) {
-        PlacaMonitoradaDTO dto = service.findById(id);
-        return ResponseEntity.ok(dto);
+        try {
+            PlacaMonitoradaDTO dto = service.findById(id);
+            return ResponseEntity.ok(dto);
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     /**
@@ -48,8 +57,14 @@ public class MonitoramentoController {
      */
     @PostMapping
     public ResponseEntity<PlacaMonitoradaDTO> create(@RequestBody PlacaMonitoradaDTO dto) {
-        dto = service.create(dto);
-        return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+        try {
+            PlacaMonitoradaDTO created = service.create(dto);
+            return ResponseEntity.status(HttpStatus.CREATED).body(created);
+        } catch (IllegalArgumentException e) {
+            // Retorna 400 Bad Request (ou 409 Conflict) com a mensagem de "Placa já existe"
+            Map<String, String> errorResponse = Collections.singletonMap("message", e.getMessage());
+            return ResponseEntity.badRequest().body((PlacaMonitoradaDTO) errorResponse);
+        }
     }
 
     /**
@@ -57,8 +72,16 @@ public class MonitoramentoController {
      */
     @PutMapping("/{id}")
     public ResponseEntity<PlacaMonitoradaDTO> update(@PathVariable Long id, @RequestBody PlacaMonitoradaDTO dto) {
-        dto = service.update(id, dto);
-        return ResponseEntity.ok(dto);
+        try {
+            PlacaMonitoradaDTO updated = service.update(id, dto);
+            return ResponseEntity.ok(updated);
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.notFound().build();
+        } catch (IllegalArgumentException e) {
+            // ✅ SIMPLIFICADO
+            Map<String, String> errorResponse = Collections.singletonMap("message", e.getMessage());
+            return ResponseEntity.badRequest().body((PlacaMonitoradaDTO) errorResponse);
+        }
     }
 
     /**
@@ -66,8 +89,12 @@ public class MonitoramentoController {
      */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
-        service.delete(id);
-        return ResponseEntity.noContent().build(); // Retorna 204 No Content, indicando sucesso
+        try {
+            service.delete(id);
+            return ResponseEntity.noContent().build();
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     @GetMapping("/alertas")

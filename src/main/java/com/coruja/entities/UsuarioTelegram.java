@@ -38,6 +38,9 @@ public class UsuarioTelegram {
         this.sobrenome = sobrenome;
     }
 
+    public UsuarioTelegram() {
+    }
+
     @PrePersist
     protected void onCreate() {
         dataCadastro = LocalDateTime.now();
