@@ -16,19 +16,22 @@ services:
     environment:
       # Ativa o perfil de produção para usar o application-prod1.properties
       - SPRING_PROFILES_ACTIVE=prod
-      # As variáveis para o Telegram serão lidas de um arquivo .env nesta pasta
+      # Telegram
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      # Banco de Dados
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      # Nota: A URL aponta para 'postgres-db' que é o nome do container na Stack EFK
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-db:5432/monitoramento_db
-      # Conecta no RabbitMQ da Stack EFK (nome do serviço: rabbitmq)
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_PORT=5672
-      - RABBITMQ_USER=${RABBITMQ_USER}
-      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      # RabbitMQ (Usando nomes padrão SPRING_...)
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - SPRING_RABBITMQ_PORT=5672
+      - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USER}
+      - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      # Eureka (Forçando a URL correta aqui para garantir)
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
     networks:
       # Conecta este contêiner à nossa rede compartilhada
       - radares-net
-    restart: unless-stopped
+    # Garante que só inicie se os serviços base estiverem saudáveis
+    restart: on-failure

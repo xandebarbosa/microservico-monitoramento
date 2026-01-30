@@ -15,7 +15,9 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -27,6 +29,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -297,6 +300,31 @@ public class MonitoramentoService {
         Page<AlertaPassagem> page = alertaRepository.findAll(pageable);
         // Usa .map() para converter cada AlertaPassagem em um AlertaPassagemDTO
         return page.map(AlertaPassagemDTO::new);
+    }
+
+    public List<AlertaPassagemDTO> buscarUltimosAlertas() {
+        // Busca os 20 alertas mais recentes
+        Pageable top20 = PageRequest.of(0, 20, Sort.by("dataHora").descending());
+
+        // Substitua 'alertaPassagemRepository' pelo nome correto do seu repositório injetado
+        return alertaRepository.findAll(top20).stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+    }
+
+    // Método auxiliar simples de conversão (ou use ModelMapper se já tiver)
+    private AlertaPassagemDTO convertToDTO(AlertaPassagem entity) {
+        AlertaPassagemDTO dto = new AlertaPassagemDTO();
+        dto.setId(entity.getId());
+        dto.setData(entity.getData());
+        dto.setHora(entity.getHora());
+        dto.setPlaca(entity.getPlaca());
+        dto.setPraca(entity.getPraca());
+        dto.setRodovia(entity.getRodovia());
+        dto.setKm(entity.getKm());
+        dto.setSentido(entity.getSentido());
+
+        return dto;
     }
 
     // Método auxiliar para mapear os dados do DTO para a Entidade

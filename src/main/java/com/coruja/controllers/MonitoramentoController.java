@@ -14,6 +14,7 @@ import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -25,6 +26,12 @@ public class MonitoramentoController {
     @Autowired
     public MonitoramentoController(MonitoramentoService service) {
         this.service = service;
+    }
+
+    @GetMapping("/ultimos")
+    public ResponseEntity<List<AlertaPassagemDTO>> getUltimos() {
+        List<AlertaPassagemDTO> ultimos = service.buscarUltimosAlertas();
+        return ResponseEntity.ok(ultimos);
     }
 
     /**
@@ -101,4 +108,5 @@ public class MonitoramentoController {
     public ResponseEntity<Page<AlertaPassagemDTO>> findAlerts(Pageable pageable) {
         return ResponseEntity.ok(service.findAlerts(pageable));
     }
+
 }
